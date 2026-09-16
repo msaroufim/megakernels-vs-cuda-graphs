@@ -1,0 +1,24 @@
+[project]
+name = "llama-megakernel-comparison"
+version = "0.1.0"
+description = "Llama: megakernel vs CUDA Graphs + PDL"
+requires-python = ">=3.10"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest>=8,<9", "ruff>=0.12,<1", "ty>=0.0.1"]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 120
+indent-width = 2
+extend-exclude = ["kernels", "benchmarks", "reference"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "upstream"]
+pythonpath = ["."]

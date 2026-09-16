@@ -1,0 +1,11 @@
+{
+  "dependencies": {
+    "fresh-w2-real-input-0909/comparison-r2/node_census.py": "9bcb598789ecfdf8bf65540b208df5dfab7948f98cc70dd8ee471d5f4837ffc9",
+    "hazy-original-fused64-timing-draft-0911/timed_graph.py": "657d20d19d41a1589ccfbb0a038b5f11e8d95548880e08b5dc3c0564b68ff360",
+    "resumed-direct2-confidence-0908/host/deepspec/megakernel/prefill_snapshot.py": "5099a3f1fc8d2e31d34c5a28915278435e1c91b02c45cfafdad4d56b4c2997bf"
+  },
+  "fixtures": {
+    "prefill_snapshot": "8dfbf7acd7324c616fcd0e9784d704fe989bff50d5550cd30e2eb096439e5d89",
+    "target_taps": "d95fe0a4318ca41ea9e0ddf84a082c8abc7a47b64e9959ee57f1889f4b3d044f"
+  }
+}

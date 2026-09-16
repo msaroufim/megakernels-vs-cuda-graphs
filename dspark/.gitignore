@@ -1,0 +1,7 @@
+.pytest_cache/
+.ruff_cache/
+.venv/
+__pycache__/
+build/
+run-notes/dspark-megakernel/artifacts/
+tmp/
