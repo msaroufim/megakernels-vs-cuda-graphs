@@ -29,6 +29,10 @@ advantage or end-to-end serving result.
 Each directory has its own environment and tests. Follow its README and run
 commands from that study’s folder.
 
+Improve either Llama baseline by editing [`llama/kernels/`](llama/kernels/) or
+[`llama/megakernel/`](llama/megakernel/), then submit a PR. See the
+[competitor guide](llama/AGENTS.md).
+
 The Llama baseline uses fused projections, packed weights, split FP32 reductions
 and Triton attention: 100 kernels per decode step. Graphs reduce host submissions;
 PDL overlaps independent weight loading with preceding work. Start with
@@ -36,9 +40,11 @@ PDL overlaps independent weight loading with preceding work. Start with
 
 ## Sources
 
-The Llama control fetches pinned [HazyResearch Megakernels](https://github.com/HazyResearch/Megakernels)
-and [ThunderKittens](https://github.com/HazyResearch/ThunderKittens); their licenses
-apply. [Measured source hashes](llama/tools/source_inventory.py).
+The Llama megakernel vendors [HazyResearch Megakernels](https://github.com/HazyResearch/Megakernels)
+CUDA sources; see [origin and license](llama/megakernel/ORIGIN.md).
+The runner fetches the pinned Hazy Python runtime and
+[ThunderKittens](https://github.com/HazyResearch/ThunderKittens).
+[Measured source hashes](llama/tools/source_inventory.py).
 DSpark derives from [DeepSpec](https://github.com/deepseek-ai/DeepSpec) and retains
 its [license](dspark/LICENSE) and [notices](dspark/NOTICE),
 which apply to that subtree. Model weights are obtained separately.

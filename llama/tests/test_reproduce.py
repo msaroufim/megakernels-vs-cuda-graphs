@@ -141,7 +141,7 @@ def successful_build(tmp_path, monkeypatch):
     "upstream": {"commit": prepare.UPSTREAM, "tracked_sha256": {"model.py": reproduce.sha256(source / "model.py")}},
     "thunderkittens": {"commit": prepare.THUNDERKITTENS, "tracked_sha256": {}},
   }
-  monkeypatch.setattr(prepare, "checked_source", lambda _: checked)
+  monkeypatch.setattr(prepare, "checked_source", lambda *_: checked)
   monkeypatch.setattr(prepare, "verify_model", lambda _: {"model.safetensors": "model-hash"})
   report = dict(
     passed=True,
