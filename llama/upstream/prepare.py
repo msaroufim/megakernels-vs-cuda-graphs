@@ -1,4 +1,4 @@
-"""Build pristine publication-era Megakernels for an explicitly assigned Hopper GPU.
+"""Build vendored publication-era Megakernels for an explicitly assigned Hopper GPU.
 
 This does not allocate GPUs. Every invocation requires a fresh external directory.
 The upstream H100 target is intentional: it selects Hopper SM90a and 132 SMs;
@@ -16,6 +16,9 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from upstream import vendor as vendoring  # noqa: E402
 
 UPSTREAM = "7309cec801537b61fea3b50d7dfe454a6cde578e"
 THUNDERKITTENS = "664c108d16f12707a73d3072ab525f26fb2b4f62"
@@ -60,7 +63,7 @@ def verify_model(model: Path) -> dict[str, str]:
   return actual
 
 
-def checked_source(source: Path) -> dict[str, Any]:
+def checked_source(source: Path, vendor: Path | None = None) -> dict[str, Any]:
   """Verify both revision identities and all tracked working-tree/index bytes."""
   result = {}
   for name, root, pin in (
@@ -70,9 +73,12 @@ def checked_source(source: Path) -> dict[str, Any]:
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
     if head != pin:
       raise ValueError(f"{name}: expected {pin}, got {head}")
-    subprocess.run(["git", "diff", "--quiet", "HEAD", "--"], cwd=root, check=True)
+    exclusions = [":(exclude)demos/low-latency-llama", ":(exclude)include"] if vendor and name == "upstream" else []
+    subprocess.run(["git", "diff", "--quiet", "HEAD", "--", ".", *exclusions], cwd=root, check=True)
     files = subprocess.check_output(["git", "ls-files", "-z"], cwd=root).split(b"\0")
     hashes = {os.fsdecode(p): sha256(root / os.fsdecode(p)) for p in files if p and (root / os.fsdecode(p)).is_file()}
+    if vendor is not None and name == "upstream":
+      hashes.update(vendoring.verify(source, vendor))
     result[name] = {"commit": head, "tracked_sha256": hashes}
   return result
 
@@ -92,9 +98,10 @@ def main() -> None:
   out, model = args.output.resolve(), args.model.resolve()
   out.mkdir(parents=True, exist_ok=False)
   source, venv = out / "upstream-authors", out / "venv"
+  vendor = Path(__file__).resolve().parents[1] / "megakernel"
   report: dict[str, Any] = {
     "passed": False,
-    "lineage": "publication-era-pristine-hopper",
+    "lineage": "publication-era-vendored-hopper",
     "upstream_commit": UPSTREAM,
     "thunderkittens_commit": THUNDERKITTENS,
     "source_root": str(source),
@@ -148,7 +155,9 @@ def main() -> None:
     run(["git", "clone", "--no-checkout", URL, str(source)])
     run(["git", "checkout", "--detach", UPSTREAM], cwd=source)
     run(["git", "submodule", "update", "--init", "--recursive"], cwd=source)
-    report["source_before"] = checked_source(source)
+    checked_source(source)
+    report["vendored_sha256"] = vendoring.overlay(source, vendor)
+    report["source_before"] = checked_source(source, vendor)
     run([sys.executable, "-m", "venv", "--system-site-packages", str(venv)])
     python = str(venv / "bin/python")
     # The documented container bootstrap installs uv in system-site-packages.
@@ -207,7 +216,7 @@ def main() -> None:
     if (expected_runtime["torch"], expected_runtime["cuda"]) != (report["device"]["torch"], report["device"]["cuda"]):
       raise ValueError("Private dependencies unexpectedly changed the image's PyTorch/CUDA")
     expected_runtime["nvcc"] = report["nvcc"].strip()
-    report["source_after"] = checked_source(source)
+    report["source_after"] = checked_source(source, vendor)
     if report["source_before"] != report["source_after"]:
       raise ValueError("Tracked source changed during build")
     metadata = out / "phase3/upstream"

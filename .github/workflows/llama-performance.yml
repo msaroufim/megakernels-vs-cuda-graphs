@@ -1,0 +1,150 @@
+name: Llama performance
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number (maintainer-authorized run, including forks)'
+        required: true
+        type: number
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+    paths:
+      - 'llama/**/*.py'
+      - 'llama/kernels/**'
+      - 'llama/megakernel/**'
+      - 'llama/upstream/**'
+      - 'llama/ci/**'
+      - 'llama/pyproject.toml'
+      - 'llama/uv.lock'
+      - '.github/workflows/llama-performance.yml'
+      - '!**/*.md'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: llama-performance-${{ github.event.pull_request.number || inputs.pr_number }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    if: >-
+      (github.event_name == 'pull_request_target' &&
+       !github.event.pull_request.draft &&
+       github.event.pull_request.head.repo.full_name == github.repository &&
+       github.event.pull_request.base.ref == 'main') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    environment: llama-benchmarks
+    steps:
+      - name: Resolve current PR
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const dispatched = context.eventName === 'workflow_dispatch';
+            const raw = dispatched ? context.payload.inputs.pr_number : context.payload.pull_request.number;
+            if (!/^[1-9][0-9]{0,8}$/.test(String(raw))) throw new Error('Invalid PR number.');
+            if (dispatched && context.ref !== 'refs/heads/main') throw new Error('Dispatch must use main.');
+            const { data: repository } = await github.rest.repos.get(context.repo);
+            if (repository.default_branch !== 'main') throw new Error('Expected main as the default branch.');
+            const { data: pr } = await github.rest.pulls.get({ ...context.repo, pull_number: Number(raw) });
+            if (pr.state !== 'open' || pr.draft || pr.base.ref !== 'main' || pr.base.repo.full_name !== repository.full_name) {
+              throw new Error('Expected an open, ready PR targeting this repository main branch.');
+            }
+            if (!dispatched && pr.head.repo?.full_name !== repository.full_name) {
+              throw new Error('Fork benchmarks require a maintainer workflow dispatch.');
+            }
+            core.setOutput('number', String(pr.number));
+            core.setOutput('base', pr.base.sha);
+            core.setOutput('head', pr.head.sha);
+      # PR code runs only inside isolated Modal sandboxes, never on this runner.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr.outputs.base }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install modal==1.5.5
+      - name: Compare base and PR
+        id: measure
+        timeout-minutes: 95
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+          BENCH_REPO: ${{ github.repository }}
+          BENCH_PR: ${{ steps.pr.outputs.number }}
+          BENCH_BASE: ${{ steps.pr.outputs.base }}
+          BENCH_HEAD: ${{ steps.pr.outputs.head }}
+        run: >-
+          timeout --signal=TERM --kill-after=60s 90m
+          python llama/ci/run_modal.py benchmark
+          --repo "$BENCH_REPO" --pr "$BENCH_PR"
+          --base-sha "$BENCH_BASE" --head-sha "$BENCH_HEAD"
+          --output "$RUNNER_TEMP/llama-performance"
+      - name: Render benchmark comment
+        if: ${{ always() && steps.pr.outcome == 'success' }}
+        env:
+          BENCH_BASE: ${{ steps.pr.outputs.base }}
+          BENCH_HEAD: ${{ steps.pr.outputs.head }}
+          BENCH_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: >-
+          python llama/ci/report.py "$RUNNER_TEMP/llama-performance/report.json"
+          --base-sha "$BENCH_BASE" --head-sha "$BENCH_HEAD"
+          --run-url "$BENCH_RUN_URL"
+          --output "$RUNNER_TEMP/llama-performance-comment.md"
+      - name: Upload benchmark artifacts
+        if: ${{ always() && steps.pr.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: llama-performance-${{ steps.pr.outputs.number }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/llama-performance/
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Update benchmark comment
+        if: ${{ always() && steps.pr.outcome == 'success' }}
+        uses: actions/github-script@v7
+        env:
+          BENCH_OUTCOME: ${{ steps.measure.outcome }}
+          BENCH_PR: ${{ steps.pr.outputs.number }}
+          BENCH_BASE: ${{ steps.pr.outputs.base }}
+          BENCH_HEAD: ${{ steps.pr.outputs.head }}
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- llama-performance-ci -->';
+            const expected = {
+              number: Number(process.env.BENCH_PR),
+              base: { sha: process.env.BENCH_BASE },
+              head: { sha: process.env.BENCH_HEAD },
+            };
+            const { data: current } = await github.rest.pulls.get({
+              ...context.repo, pull_number: expected.number,
+            });
+            if (current.state !== 'open' || current.head.sha !== expected.head.sha || current.base.sha !== expected.base.sha) {
+              core.info('Skipping stale benchmark comment.');
+              return;
+            }
+            const commentPath = `${process.env.RUNNER_TEMP}/llama-performance-comment.md`;
+            let body = `${marker}\n### Llama performance\n\nBenchmark did not produce a validated report. See the Actions run for details. Manual review and merge required.`;
+            if (fs.existsSync(commentPath)) {
+              const rendered = fs.readFileSync(commentPath, 'utf8');
+              if (Buffer.byteLength(rendered) <= 16384 && rendered.startsWith(marker)) body = rendered;
+            }
+            if (process.env.BENCH_OUTCOME !== 'success') {
+              body += '\n\n**The run did not finish successfully.** Review the Actions run before merging.';
+            }
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              ...context.repo, issue_number: expected.number, per_page: 100,
+            });
+            const previous = comments.find(c => c.user?.login === 'github-actions[bot]' && c.body?.startsWith(marker));
+            if (previous) {
+              await github.rest.issues.updateComment({ ...context.repo, comment_id: previous.id, body });
+            } else {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: expected.number, body });
+            }

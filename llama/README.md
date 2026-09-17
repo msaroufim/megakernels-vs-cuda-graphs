@@ -1,5 +1,8 @@
 # Run the Llama comparison
 
+To improve either baseline, start with the [competitor guide](AGENTS.md):
+edit `kernels/` or `megakernel/`, validate and submit a PR.
+
 ## Requirements
 
 - One full **H100 SXM or H200 with 132 SMs**, Linux and an NVIDIA container
@@ -51,28 +54,56 @@ env -u TORCH_CUDA_ARCH_LIST uv run --no-project python reproduce.py \
   --gpu-type "$GPU_TYPE" --gpu-uuid "$GPU_UUID" --suite smoke
 ```
 
-The smoke builds both implementations, generates development references and
-checks one paired run. For the full comparison, reuse that build with a fresh
-work directory:
+The smoke builds both implementations from this checkout, generates development
+references and checks one paired run. Run the full comparison in a fresh directory:
 
 ```bash
 env -u TORCH_CUDA_ARCH_LIST uv run --no-project python reproduce.py \
   --model /model --workdir /experiments/full-001 \
-  --gpu-type "$GPU_TYPE" --gpu-uuid "$GPU_UUID" --suite full \
-  --build /experiments/smoke-001/build
+  --gpu-type "$GPU_TYPE" --gpu-uuid "$GPU_UUID" --suite full
 ```
 
 The full run freezes sources, generates fresh references, runs 27 paired
 processes and checks all outputs serially on the same GPU. Builds from another
-GPU family are rejected. Use a new work directory for each run; logs, tensors,
-hashes and results stay there. Setup/execution errors stop the runner;
-numerical rejection is recorded in the results.
+GPU family are rejected. Always rebuild in a new work directory after changing
+either kernel; do not reuse an old `--build`. Logs, tensors, hashes and results
+stay outside Git. Execution errors stop the runner; numerical rejection is
+recorded in the results.
 
 ```bash
 uv run --no-project python tools/report.py --workdir /experiments/full-001
 ```
 
 [Results and method](docs/RESULTS.md).
+
+## PR performance checks
+
+Changes to Llama kernels run both base and PR versions on one Modal H100.
+The check alternates three process pairs, each with five warmups and ten timed
+127-step sequences on `dev_weather`. It posts latency, paired t intervals
+and independent numerical checks in one updated PR comment. These are development
+checks, not a replacement for the full evaluation. Review and merge are manual.
+
+The workflow uses the base branch's harness. Proposed code runs without credentials
+or network access; model weights mount read-only. Both CI and the local runner
+compile `kernels/` and the vendored `megakernel/` sources, using the pinned Hazy
+Python runtime and ThunderKittens. See [source attribution](megakernel/ORIGIN.md).
+
+Maintainers configure `MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET` in the
+`llama-benchmarks` GitHub environment using the GPU MODE account. Cache weights once
+with Hugging Face access (`HF_TOKEN`) and Modal credentials:
+
+```bash
+uv run python ci/run_modal.py seed-weights
+```
+
+This creates the `megakernels-llama-weights` Modal volume and verifies all four model
+file hashes. Same-repository PRs run automatically. For forks, a maintainer runs
+**Llama performance → Run workflow** on `main` with the PR number after reviewing
+the code that will access the weights. Raw logs and reports are retained as
+artifacts for 14 days. New pushes cancel older runs. Each run has a 90-minute
+sandbox limit.
+The workflow becomes active after it lands on `main`.
 
 ## CPU checks
 
@@ -81,7 +112,7 @@ Run from `llama/`:
 ```bash
 uv run ruff format --check .
 uv run ruff check .
-uv run ty check reproduce.py tools upstream/prepare.py campaign.py
+uv run ty check reproduce.py tools upstream/prepare.py upstream/vendor.py campaign.py ci
 uv run pytest -q
 ```
 

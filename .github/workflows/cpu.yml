@@ -19,7 +19,7 @@ jobs:
       - run: uv sync --locked
       - run: uv run ruff format --check .
       - run: uv run ruff check .
-      - run: uv run ty check reproduce.py tools upstream/prepare.py campaign.py
+      - run: uv run ty check reproduce.py tools upstream/prepare.py upstream/vendor.py campaign.py ci
       - run: uv run pytest -q
   dspark-checks:
     runs-on: ubuntu-latest

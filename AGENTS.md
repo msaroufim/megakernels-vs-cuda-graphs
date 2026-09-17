@@ -3,10 +3,14 @@
 Keep the Llama comparison runnable on one H100/H200 with public dependencies
 and user-supplied weights. DSpark replay requires external artifacts; document
 that limitation. Keep weights, generated data, binaries and caches out of Git.
+For Llama submissions, follow [the competitor guide](llama/AGENTS.md).
 
-Preserve measured `llama/kernels/`, `llama/benchmarks/`, `llama/reference/` and
-`llama/docs/PROTOCOL.md` bytes. New algorithms or numerical rules need a separate
-study. Fetch upstream Hazy code at its pinned commits without patches.
+Keep historical result claims tied to their recorded source hashes. Kernel changes
+are allowed and measured by PR CI; changes to the benchmark, reference or numerical
+rules require a separate study. Edit `llama/kernels/` or `llama/megakernel/`
+directly; local runs and CI compile those sources. Preserve the vendored
+[attribution and license](llama/megakernel/ORIGIN.md). Historical Llama results
+used the original, unmodified Hazy code.
 
 Never overlap GPU timing with checking or other workloads. Report numerical
 fidelity separately from latency; feature-level speedups require ablations.
@@ -15,6 +19,7 @@ Each study has its own `uv` environment. Run formatting, lint, type checks and t
 [the reproduction guide](llama/README.md#cpu-checks). DSpark has its own
 [environment](dspark/README.md#cpu-checks).
 
-Keep `main` as one parentless commit. Amend that commit for updates and push with
-an explicit `--force-with-lease`; never publish backup refs or old history.
+Contributors work on branches and submit PRs; do not push to `main`.
+Maintainers keep `main` as one parentless commit: amend it for approved updates
+and push with an explicit `--force-with-lease`; never publish backup refs or old history.
 Keep the repository private unless the user asks to change visibility.

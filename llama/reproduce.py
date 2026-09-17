@@ -56,7 +56,7 @@ def validate_paths(repo: Path, workdir: Path, model: Path, gpu_uuid: str) -> Non
 
 
 def validate_build(build: Path, model: Path, gpu_type: str = "H200") -> dict:
-  """Verify a locally built pristine control and every declared runtime byte."""
+  """Verify a locally built vendored control and every declared runtime byte."""
   from upstream import prepare
 
   report = json.loads((build / "setup.json").read_text())
@@ -84,7 +84,7 @@ def validate_build(build: Path, model: Path, gpu_type: str = "H200") -> dict:
     raise ValueError("Build source/interpreter paths do not belong to this build")
   if not python.is_file():
     raise ValueError("The build interpreter is missing")
-  checked = prepare.checked_source(source)
+  checked = prepare.checked_source(source, Path(__file__).resolve().parent / "megakernel")
   if checked != report["source_before"] or checked != report["source_after"]:
     raise ValueError("Pinned tracked upstream source changed after building")
   binary = Path(report["binary_path"])
