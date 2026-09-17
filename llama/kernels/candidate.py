@@ -21,7 +21,7 @@ class CandidateOptions:
     pdl: bool = True
     attention: str = "sdpa"
     native_bf16_fma: bool = True
-    attention_tile: int = 32
+    attention_tile: int = 16
     attention_warps: int = 4
 
 
