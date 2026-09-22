@@ -34,6 +34,10 @@ native parent, not the graph.
 
 Shared runtime modules with `full_loop` names support the proposal harness.
 
+The [worker timeline](../docs/dspark-bubbles.png) illustrates a historical
+instrumented capture. See [how to read and regenerate it](docs/bubbles.md)
+with the CPU-only [renderer](scripts/megakernel/render_trace.py).
+
 ## Historical replay requires external artifacts
 
 **Replay requires the original artifact packet:** weights, prefill/target-tap
