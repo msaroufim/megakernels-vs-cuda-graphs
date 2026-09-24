@@ -19,6 +19,18 @@ Llama’s conventional baseline passes the numerical criteria; Hazy misses them.
 DSpark has unresolved logit/confidence differences. Neither establishes a general
 advantage or end-to-end serving result.
 
+## Inside a megakernel
+
+![DSpark worker timeline: 152 persistent CTAs, with a zoom of the first FFN](docs/dspark-bubbles.png)
+
+One row per GPU worker, inspired by HazyResearch's
+[bubble diagrams](https://hazyresearch.stanford.edu/blog/2025-05-27-no-bubbles).
+Colors show task bodies; gray shows controller spans that may include waiting.
+Blank regions are unrecorded, not proven idle. The zoom shows the first FFN.
+This is the **median of seven historical instrumented GB300 captures
+(September 4, 956.768 µs)**, separate from the final p50 results above.
+[Trace provenance and rendering command](dspark/docs/bubbles.md).
+
 ## Layout
 
 | Directory | Contents |
