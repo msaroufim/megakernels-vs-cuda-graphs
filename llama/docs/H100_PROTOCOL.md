@@ -34,7 +34,8 @@ artifacts outside Git on durable storage; budget at least 150 GiB free space.
 The primary table reports the eight-prompt graph comparison with the existing
 hierarchical prompt/process interval; native diagnostics remain separate. Report
 numerical fidelity and timing independently if either arm misses the unchanged
-symmetric criteria. Publish H100 results separately from H200 and DSpark/GB300.
+symmetric criteria. Publish H100 results separately from H200 and the
+experimental DSpark/GB300 study.
 
 This reproduces the original Hazy Hopper implementation against our conventional
 baseline on H100. It does not recreate the historical blog's exact environment,

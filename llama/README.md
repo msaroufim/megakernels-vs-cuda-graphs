@@ -117,6 +117,6 @@ uv run pytest -q
 ```
 
 Measured kernel, benchmark and reference sources are excluded from formatting.
-DSpark uses its own environment and [checks](../dspark/README.md#cpu-checks).
+DSpark uses its own environment and [checks](../experimental/dspark/README.md#cpu-checks).
 Weights, generated data and binaries stay outside Git.
 [Source attribution](../README.md#sources).

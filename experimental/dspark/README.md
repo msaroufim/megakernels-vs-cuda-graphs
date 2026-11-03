@@ -1,12 +1,16 @@
-# DSpark: a persistent GPU scheduler versus CUDA Graphs
+# Experimental DSpark: a persistent GPU scheduler versus CUDA Graphs
+
+**Status: exploratory work.** The prototype is slower than the graph baseline
+and has unresolved numerical differences. The measurements below document one
+historical experiment; they are not a validated performance result.
 
 | September 14, 2026 matched-work result | Proposal p50 |
 |---|---:|
 | SGLang-based CUDA Graph with PDL | **803.968 µs** |
 | One persistent GPU-scheduled CUDA kernel, without PDL | **828.544 µs** |
 
-The megakernel takes **3.06% longer** and wins **0/96 pairs** (median paired
-difference: +22.592 µs). One GB300, one session, one fixed input; no new GPU run
+In this experiment, the megakernel takes **3.06% longer** and wins
+**0/96 pairs** (median paired difference: +22.592 µs). One GB300, one session, one fixed input; no new GPU run
 was made during packaging. Each of three blocks uses eight warmup pairs,
 alternating arm order, same-arm primers and CUDA-event timing without a profiler.
 
@@ -20,7 +24,8 @@ Both include target-row selection, projection/normalization, three target KV
 writes, proposal preparation, draft layers, head/Markov processing and
 confidence/STS publication. Target verification, allocation, packing/loading
 and target-tap mean/concatenation are excluded. The graph has custom DSpark
-wrappers. This is not a scheduler-only ablation or an end-to-end serving test.
+wrappers. This is not a scheduler-only ablation or an end-to-end serving
+test. It does not support a general megakernel performance claim.
 
 Greedy IDs match, but head/base-logit relative L2 differs by **4.1622% / 3.4438%**;
 confidence differs by up to **0.03929**. Evolving-cache execution and normalized

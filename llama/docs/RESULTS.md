@@ -76,4 +76,5 @@ artifacts stay outside Git. Final summary SHA256s:
 
 [Run instructions](../README.md). Frozen protocols: [original](PROTOCOL.md),
 [H200](../PROTOCOL.md), [H100](H100_PROTOCOL.md).
-[Separate DSpark study](../../dspark/README.md).
+The separate [experimental DSpark study](../../experimental/dspark/README.md)
+has not passed the numerical-fidelity gate.

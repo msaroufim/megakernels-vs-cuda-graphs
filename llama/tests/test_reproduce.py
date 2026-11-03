@@ -279,7 +279,7 @@ def test_runner_rejects_artifacts_in_sibling_study(tmp_path, monkeypatch):
   monkeypatch.delenv("TORCH_CUDA_ARCH_LIST", raising=False)
   checkout = tmp_path / "checkout"
   study = checkout / "llama"
-  sibling = checkout / "dspark"
+  sibling = checkout / "experimental/dspark"
   model = tmp_path / "model"
   for path in (study, sibling, model):
     path.mkdir(parents=True)

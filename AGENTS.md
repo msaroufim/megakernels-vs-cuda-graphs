@@ -17,7 +17,7 @@ fidelity separately from latency; feature-level speedups require ablations.
 
 Each study has its own `uv` environment. Run formatting, lint, type checks and tests from
 [the reproduction guide](llama/README.md#cpu-checks). DSpark has its own
-[environment](dspark/README.md#cpu-checks).
+[environment](experimental/dspark/README.md#cpu-checks).
 
 Contributors work on branches and submit PRs; do not push to `main`.
 Maintainers keep `main` as one parentless commit: amend it for approved updates

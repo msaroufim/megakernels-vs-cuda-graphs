@@ -46,7 +46,7 @@ Its recorded source hashes are:
 
 The raw packet is external, like the other DSpark replay artifacts. The PNG
 is checked in; regenerating it requires the input above. No GPU is needed.
-From `dspark/`, after restoring the packet:
+From `experimental/dspark/`, after restoring the packet:
 
 ```bash
 uv sync --frozen --group dev
