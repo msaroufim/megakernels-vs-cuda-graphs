@@ -1,8 +1,8 @@
 # Megakernels vs CUDA Graphs
 
-**Two case studies where CUDA Graphs + programmatic dependent launch (PDL)
-perform roughly on par with megakernels:** Llama decode and DSpark proposals.
-The measured gaps are 0.7–4.6%, with different numerical behavior.
+**Llama 1B decode is close between CUDA Graphs + programmatic dependent launch
+(PDL) and the original HazyResearch megakernel:** measured gaps are 0.7–4.6%.
+An experimental DSpark study is included separately below.
 
 Megakernel research needs more implementations and baselines that others can
 run, inspect and extend. We’re collecting both approaches to support that work.
@@ -11,22 +11,19 @@ run, inspect and extend. We’re collecting both approaches to support that work
 |---|---|---:|---:|---|
 | [Llama 1B](llama/docs/RESULTS.md) | H100 | 979.51 µs | 972.78 µs | Megakernel throughput +0.69% |
 | [Llama 1B](llama/docs/RESULTS.md) | H200 | 794.74 µs | 759.83 µs | Megakernel throughput +4.59% |
-| [DSpark](dspark/README.md) | GB300 | 803.968 µs | 828.544 µs | Megakernel latency +3.06% |
 
-Llama: mean per decode step, original unmodified HazyResearch kernel.
-DSpark: p50 per proposal, one fixed input/session. These are timing comparisons:
-Llama’s conventional baseline passes the numerical criteria; Hazy misses them.
-DSpark has unresolved logit/confidence differences. Neither establishes a general
-advantage or end-to-end serving result.
+Llama: mean per decode step, original unmodified HazyResearch kernel. The
+conventional baseline passes the numerical criteria; Hazy misses them. These
+timings do not establish a general advantage or end-to-end serving result.
 
 ## Layout
 
 | Directory | Contents |
 |---|---|
 | [`llama/`](llama/README.md) | H100/H200 kernels, benchmark, references and one-GPU runner |
-| [`dspark/`](dspark/README.md) | GB300 proposal kernel, graph baseline and replay tools; external artifacts required |
+| [`experimental/dspark/`](experimental/dspark/README.md) | Exploratory GB300 proposal kernel, graph baseline and replay tools; external artifacts required |
 
-Each directory has its own environment and tests. Follow its README and run
+Each study has its own environment and tests. Follow its README and run
 commands from that study’s folder.
 
 Improve either Llama baseline by editing [`llama/kernels/`](llama/kernels/) or
@@ -38,6 +35,15 @@ and Triton attention: 100 kernels per decode step. Graphs reduce host submission
 PDL overlaps independent weight loading with preceding work. Start with
 [llama/kernels/candidate.py](llama/kernels/candidate.py) and [projection.cu](llama/kernels/projection.cu).
 
+## Experimental: DSpark
+
+The [DSpark study](experimental/dspark/README.md) is an exploratory scheduler
+prototype, not a validated performance result. On one fixed GB300 workload, the
+megakernel took **828.544 µs p50** against **803.968 µs** for CUDA Graphs + PDL:
+**3.06% longer**, winning 0/96 pairs. It also has unresolved logit/confidence
+differences and requires unavailable external replay artifacts. Treat its code
+and measurements as a starting point for further investigation.
+
 ## Sources
 
 The Llama megakernel vendors [HazyResearch Megakernels](https://github.com/HazyResearch/Megakernels)
@@ -46,5 +52,5 @@ The runner fetches the pinned Hazy Python runtime and
 [ThunderKittens](https://github.com/HazyResearch/ThunderKittens).
 [Measured source hashes](llama/tools/source_inventory.py).
 DSpark derives from [DeepSpec](https://github.com/deepseek-ai/DeepSpec) and retains
-its [license](dspark/LICENSE) and [notices](dspark/NOTICE),
+its [license](experimental/dspark/LICENSE) and [notices](experimental/dspark/NOTICE),
 which apply to that subtree. Model weights are obtained separately.
