@@ -949,6 +949,28 @@ __device__ __forceinline__ uint64_t load_acquire_u64(const uint64_t* address) {
   return static_cast<uint64_t>(value);
 }
 
+// A failed poll needs coherence, not another acquire fence. Once a counter
+// reaches the required value, reacquire it before reading any dependent data.
+__device__ __forceinline__ uint64_t wait_counter_at_least(
+    const uint64_t* address, uint64_t target) {
+  uint64_t observed = load_acquire_u64(address);
+  while (observed < target) {
+    __nanosleep(32);
+    observed = load_relaxed_u64(address);
+  }
+  return observed == target ? observed : load_acquire_u64(address);
+}
+
+__device__ __forceinline__ uint64_t wait_counter_exact(
+    const uint64_t* address, uint64_t target) {
+  uint64_t observed = load_acquire_u64(address);
+  while (observed != target) {
+    __nanosleep(32);
+    observed = load_relaxed_u64(address);
+  }
+  return observed;
+}
+
 __device__ __forceinline__ void store_relaxed_u64(
     uint64_t* address,
     uint64_t value) {
@@ -1030,11 +1052,10 @@ __device__ __forceinline__ uint64_t wait_direct_dependencies(
     // Acquiring the last release RMW joins every producer's output through
     // that counter's release sequence. Only Markov has a last-CTA output
     // epilogue that requires a separate completed flag.
-    while (load_acquire_u64(counter) != completed) __nanosleep(32);
+    wait_counter_exact(counter, completed);
 #else
     const uint64_t completed = pack_epoch(epoch, 2);
-    while (load_acquire_u64(&workspace.publish_epoch[predecessor]) != completed)
-      __nanosleep(32);
+    wait_counter_exact(&workspace.publish_epoch[predecessor], completed);
 #endif
   }
   ready_cache = phase;
@@ -1052,7 +1073,7 @@ __device__ __forceinline__ bool direct_dependencies_ready(
     SchedulerWorkspace workspace, int phase, uint32_t epoch, int& ready_cache) {
   static_assert(DSPARK_V4_DIRECT_DEPENDENCIES == 2);
   if (ready_cache == phase) return true;
-  if (load_acquire_u64(&workspace.publish_epoch[phase]) != pack_epoch(epoch, 1))
+  if (load_relaxed_u64(&workspace.publish_epoch[phase]) != pack_epoch(epoch, 1))
     return false;
   const int begin = generated::kPredecessorOffsets[phase];
   const int end = generated::kPredecessorOffsets[phase + 1];
@@ -1067,8 +1088,10 @@ __device__ __forceinline__ bool direct_dependencies_ready(
     const uint64_t* counter = epilogue
         ? &workspace.publish_epoch[predecessor]
         : &workspace.completed_tiles[predecessor];
-    if (load_acquire_u64(counter) != completed) return false;
+    if (load_relaxed_u64(counter) != completed) return false;
   }
+  if (load_acquire_u64(&workspace.publish_epoch[phase]) != pack_epoch(epoch, 1))
+    return false;
   ready_cache = phase;
   return true;
 }
@@ -5880,15 +5903,8 @@ __global__ __launch_bounds__(kLaunchMaxThreads, 1) void dspark_v4_scheduler_kern
           const uint64_t published = wait_published_phase<true>(
               &workspace.publish_epoch[phase], epoch);
 #else
-          uint64_t published;
-          do {
-            published = load_acquire_u64(&workspace.publish_epoch[phase]);
-            if (counter_epoch(published) == epoch
-                && counter_value(published) >= 1) {
-              break;
-            }
-            __nanosleep(32);
-          } while (true);
+          const uint64_t published = wait_counter_at_least(
+              &workspace.publish_epoch[phase], pack_epoch(epoch, 1));
 #endif
           // Another CTA can finish the entire phase before this worker reaches
           // its AOT slot. Epoch state 2 is therefore ready-and-already-finished.
@@ -5934,9 +5950,7 @@ __global__ __launch_bounds__(kLaunchMaxThreads, 1) void dspark_v4_scheduler_kern
         wait_published_phase<false>(&workspace.publish_epoch[phase], epoch);
 #else
         const uint64_t ready = pack_epoch(epoch, 1);
-        while (load_acquire_u64(&workspace.publish_epoch[phase]) != ready) {
-          __nanosleep(32);
-        }
+        wait_counter_exact(&workspace.publish_epoch[phase], ready);
 #endif
         const uint32_t chunk = generated::kClaimChunks[phase];
         const uint32_t begin = static_claim * chunk;
@@ -5958,9 +5972,7 @@ __global__ __launch_bounds__(kLaunchMaxThreads, 1) void dspark_v4_scheduler_kern
         wait_published_phase<false>(&workspace.publish_epoch[phase], epoch);
 #else
         const uint64_t ready = pack_epoch(epoch, 1);
-        while (load_acquire_u64(&workspace.publish_epoch[phase]) != ready) {
-          __nanosleep(32);
-        }
+        wait_counter_exact(&workspace.publish_epoch[phase], ready);
 #endif
         const uint32_t chunk = generated::kClaimChunks[phase];
         const uint32_t begin = claim * chunk;
@@ -6476,9 +6488,7 @@ __global__ __launch_bounds__(kLaunchMaxThreads, 1) void dspark_v4_scheduler_kern
   // may retire normally. The barrier carries its acquire to the copy lanes.
   if (worker == 0) {
     if (threadIdx.x == 0) {
-      while (load_acquire_u64(worker_word(workspace, 0, 7)) != pack_epoch(epoch, 1)) {
-        __nanosleep(32);
-      }
+      wait_counter_exact(worker_word(workspace, 0, 7), pack_epoch(epoch, 1));
     }
     __syncthreads();
     dspark_proposal_io::publish(io, output_ids);

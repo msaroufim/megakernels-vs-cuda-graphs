@@ -98,6 +98,14 @@ This produces a new `build-record.json` requiring numerical/runtime validation.
 The original packet's `pipeline.json` benchmark stage and `main_bootstrap.py`
 record the measured command and cache/environment setup.
 
+The candidate branch `dspark-dependency-polling` changes dependency polling and
+releases the persistent TMEM allocation permit. To rebuild both changes together,
+add `--scheduler-overlay --tmem-overlay` to the build command. Test them as two
+separate ablations before combining them. The scheduler overlay accepts only
+reviewed polling edits and rejects phase-body changes. These changes do not
+address the reported logit differences and need a new GB300 numerical and
+paired-timing run before they can be called a speedup.
+
 ## CPU checks
 
 Run these from this directory using Python 3.11+ and the subtree's isolated environment:

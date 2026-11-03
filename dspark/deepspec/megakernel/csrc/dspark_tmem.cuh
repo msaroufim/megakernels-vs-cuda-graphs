@@ -19,6 +19,10 @@ __device__ __forceinline__ void reserve() {
   if (threadIdx.x < 32) {
     cute::TMEM::Allocator1Sm allocator;
     allocator.allocate(kReservedColumns, &base_slot());
+    // This CTA retains its columns for the whole proposal and never allocates
+    // again. Let another resident CTA acquire the allocation permit instead
+    // of serializing behind this persistent reservation.
+    asm volatile("tcgen05.relinquish_alloc_permit.cta_group::1.sync.aligned;" ::: "memory");
   }
   __syncthreads();
 }

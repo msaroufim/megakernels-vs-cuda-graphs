@@ -1,6 +1,7 @@
 """Build single-launch proposal IO around the exact retained full V4 math image."""
 
 import argparse
+import difflib
 import json
 import os
 import shutil
@@ -79,8 +80,72 @@ def sha_bytes(raw):
     return hashlib.sha256(raw).hexdigest()
 
 
-def build(artifact_root, output, overlay):
-    """Reuse the retained compiler inputs with one explicit feature flag and a new build name."""
+def scheduler_overlay(retained, overlay, *, include_tmem=False, include_scheduler=True):
+    """Apply only reviewed scheduler edits; keep all retained phase bodies exact."""
+    original = retained.read_text()
+    candidate = (overlay / KERNEL).read_text()
+    if not include_scheduler:
+        candidate = original
+    if include_tmem:
+        tmem_path = retained.parent / "dspark_tmem.cuh"
+        tmem_original = tmem_path.read_text()
+        tmem_candidate = (overlay / "dspark_tmem.cuh").read_text()
+        if tmem_original == tmem_candidate:
+            raise ValueError("TMEM overlay requested but no TMEM changes found")
+        tmem_path.write_text(tmem_candidate)
+    else:
+        tmem_original = tmem_candidate = None
+    diff = list(difflib.unified_diff(original.splitlines(), candidate.splitlines(), n=0))
+    changed = [
+        line[1:]
+        for line in diff
+        if line.startswith(("+", "-")) and not line.startswith(("+++", "---"))
+    ]
+    forbidden = [
+        line
+        for line in changed
+        if line.strip()
+        and not any(
+            token in line
+            for token in (
+                "load_acquire_u64",
+                "load_relaxed_u64",
+                "wait_counter_",
+                "observed",
+                "nanosleep",
+                "published",
+                "ready",
+                "coherence",
+                "acquire",
+                "counter",
+                "dependent data",
+            )
+        )
+    ]
+    if forbidden:
+        raise ValueError(f"Scheduler overlay changes non-polling code: {forbidden[:4]}")
+    if original == candidate and not include_tmem:
+        raise ValueError("Scheduler overlay requested but no scheduler changes found")
+    if include_scheduler and not changed:
+        raise ValueError("Scheduler overlay produced no reviewable diff")
+    retained.write_text(candidate)
+    shutil.copyfile(overlay / "dspark_proposal_io.cuh", retained.parent / Path(HEADER).name)
+    return {
+        "mode": "reviewed scheduler overlay",
+        "retained_kernel_sha256": sha_bytes(original.encode()),
+        "candidate_kernel_sha256": sha_bytes(candidate.encode()),
+        "tmem_original_sha256": sha_bytes(tmem_original.encode()) if tmem_original else None,
+        "tmem_candidate_sha256": sha_bytes(tmem_candidate.encode()) if tmem_candidate else None,
+        "changed_lines": len(changed),
+        "scheduler_only": include_scheduler,
+        "tmem_only": include_tmem and not include_scheduler,
+    }
+
+
+def build(
+    artifact_root, output, overlay, scheduler_overlay_enabled=False, tmem_overlay_enabled=False
+):
+    """Rebuild retained inputs with IO and, optionally, reviewed scheduler edits."""
     if os.environ.get("CUDA_VISIBLE_DEVICES") != "":
         raise ValueError("Build in a subprocess with CUDA devices hidden")
     import torch
@@ -102,12 +167,24 @@ def build(artifact_root, output, overlay):
             raise ValueError(f"Retained source changed: {name}")
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(donor, target)
-    proof = integrate(source, overlay)
+    if scheduler_overlay_enabled or tmem_overlay_enabled:
+        proof = scheduler_overlay(
+            source / KERNEL,
+            overlay,
+            include_tmem=tmem_overlay_enabled,
+            include_scheduler=scheduler_overlay_enabled,
+        )
+    else:
+        proof = integrate(source, overlay)
     inventory = {name: sha(source / name) for name in (*base["source_sha256"], HEADER)}
     emit(output / "source-manifest.json", inventory)
     emit(output / "integration-proof.json", proof)
     args = dict(base["observed_load_inputs"])
     args["name"] = "dspark_full_proposal_io_0913"
+    if scheduler_overlay_enabled:
+        args["name"] += "_scheduler_poll"
+    if tmem_overlay_enabled:
+        args["name"] += "_tmem_permit"
     for key in ("sources", "extra_include_paths"):
         if key in args:
             args[key] = [str(value).replace(base["source"], str(source)) for value in args[key]]
@@ -132,6 +209,8 @@ def build(artifact_root, output, overlay):
         "torch_version": torch.__version__,
         "cuda_initialized": False,
         "scope": "One full proposal launch; numerical/runtime qualification pending",
+        "scheduler_overlay": scheduler_overlay_enabled,
+        "tmem_overlay": tmem_overlay_enabled,
     }
     emit(output / "build-record.json", record)
     for option, name in (("--dump-resource-usage", "resources.txt"), ("--dump-sass", "sass.txt")):
@@ -152,8 +231,24 @@ def main():
     parser.add_argument("--artifact-root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--overlay", type=Path, required=True)
+    parser.add_argument(
+        "--scheduler-overlay",
+        action="store_true",
+        help="Apply reviewed scheduler-only changes instead of requiring the historical kernel",
+    )
+    parser.add_argument(
+        "--tmem-overlay",
+        action="store_true",
+        help="Apply the independently reviewed TMEM lifetime change from the overlay",
+    )
     args = parser.parse_args()
-    build(args.artifact_root, args.output, args.overlay)
+    build(
+        args.artifact_root,
+        args.output,
+        args.overlay,
+        args.scheduler_overlay,
+        args.tmem_overlay,
+    )
 
 
 if __name__ == "__main__":
