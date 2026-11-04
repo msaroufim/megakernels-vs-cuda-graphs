@@ -105,6 +105,10 @@ separate ablations before combining them. The scheduler overlay accepts only
 reviewed polling edits and rejects phase-body changes. These changes do not
 address the reported logit differences and need a new GB300 numerical and
 paired-timing run before they can be called a speedup.
+Successful waits reacquire the completed counter, and readiness checks acquire
+each predecessor separately; acquiring the phase's initialization alone does
+not acquire its predecessors' outputs. CPU regression tests exercise these
+paths with scripted counter observations, but do not validate GPU memory ordering.
 
 ## CPU checks
 

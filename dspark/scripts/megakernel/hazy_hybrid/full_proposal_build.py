@@ -83,7 +83,7 @@ def sha_bytes(raw):
 def scheduler_overlay(retained, overlay, *, include_tmem=False, include_scheduler=True):
     """Apply only reviewed scheduler edits; keep all retained phase bodies exact."""
     original = retained.read_text()
-    candidate = (overlay / KERNEL).read_text()
+    candidate = (overlay / Path(KERNEL).name).read_text()
     if not include_scheduler:
         candidate = original
     if include_tmem:
@@ -105,6 +105,15 @@ def scheduler_overlay(retained, overlay, *, include_tmem=False, include_schedule
         line
         for line in changed
         if line.strip()
+        not in (
+            "",
+            "}",
+            "do {",
+            "} while (true);",
+            "break;",
+            "return false;",
+            "const uint64_t* address, uint64_t target) {",
+        )
         and not any(
             token in line
             for token in (
@@ -114,6 +123,7 @@ def scheduler_overlay(retained, overlay, *, include_tmem=False, include_schedule
                 "observed",
                 "nanosleep",
                 "published",
+                "publish_epoch",
                 "ready",
                 "coherence",
                 "acquire",
@@ -167,6 +177,7 @@ def build(
             raise ValueError(f"Retained source changed: {name}")
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(donor, target)
+    io_proof = integrate(source, overlay)
     if scheduler_overlay_enabled or tmem_overlay_enabled:
         proof = scheduler_overlay(
             source / KERNEL,
@@ -174,8 +185,9 @@ def build(
             include_tmem=tmem_overlay_enabled,
             include_scheduler=scheduler_overlay_enabled,
         )
+        proof["io_integration"] = io_proof
     else:
-        proof = integrate(source, overlay)
+        proof = io_proof
     inventory = {name: sha(source / name) for name in (*base["source_sha256"], HEADER)}
     emit(output / "source-manifest.json", inventory)
     emit(output / "integration-proof.json", proof)

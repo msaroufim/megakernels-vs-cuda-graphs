@@ -955,18 +955,24 @@ __device__ __forceinline__ uint64_t wait_counter_at_least(
     const uint64_t* address, uint64_t target) {
   uint64_t observed = load_acquire_u64(address);
   while (observed < target) {
-    __nanosleep(32);
-    observed = load_relaxed_u64(address);
+    do {
+      __nanosleep(32);
+      observed = load_relaxed_u64(address);
+    } while (observed < target);
+    observed = load_acquire_u64(address);
   }
-  return observed == target ? observed : load_acquire_u64(address);
+  return observed;
 }
 
 __device__ __forceinline__ uint64_t wait_counter_exact(
     const uint64_t* address, uint64_t target) {
   uint64_t observed = load_acquire_u64(address);
   while (observed != target) {
-    __nanosleep(32);
-    observed = load_relaxed_u64(address);
+    do {
+      __nanosleep(32);
+      observed = load_relaxed_u64(address);
+    } while (observed != target);
+    observed = load_acquire_u64(address);
   }
   return observed;
 }
@@ -1089,6 +1095,8 @@ __device__ __forceinline__ bool direct_dependencies_ready(
         ? &workspace.publish_epoch[predecessor]
         : &workspace.completed_tiles[predecessor];
     if (load_relaxed_u64(counter) != completed) return false;
+    // Each predecessor counter needs its own acquire before dependent data.
+    if (load_acquire_u64(counter) != completed) return false;
   }
   if (load_acquire_u64(&workspace.publish_epoch[phase]) != pack_epoch(epoch, 1))
     return false;
