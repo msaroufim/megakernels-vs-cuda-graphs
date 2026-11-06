@@ -22,6 +22,7 @@ timings do not establish a general advantage or end-to-end serving result.
 |---|---|
 | [`llama/`](llama/README.md) | H100/H200 kernels, benchmark, references and one-GPU runner |
 | [`experimental/dspark/`](experimental/dspark/README.md) | Exploratory GB300 proposal kernel, graph baseline and replay tools; external artifacts required |
+| [`experimental/evo2/`](experimental/evo2/README.md) | Evo 2 7B decode on B300: CUDA Graph baseline versus the Hyperkernel megakernel |
 
 Each study has its own environment and tests. Follow its README and run
 commands from that study’s folder.
